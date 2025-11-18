@@ -1,129 +1,182 @@
 import streamlit as st
 import requests
 
-# ----------------------------------------------------
-# F1: INTEGRASI DAN SETUP API
-# ----------------------------------------------------
+# ==============================================================================
+# 1. SETUP KONSTANTA & FUNGSI API
+# ==============================================================================
 
-# Kunci API yang Anda berikan
+# Ganti dengan API Key Anda yang sudah didapat
 TMDB_API_KEY = "e76b4db28d15b094e06f08fd37a29267" 
-# BASE URL TMDB API yang BENAR
-TMDB_API_BASE_URL = "https://api.themoviedb.org/3" 
-# BASE URL TMDB untuk menampilkan gambar (misalnya ukuran w500)
-IMAGE_PREFIX_URL = "https://image.tmdb.org/t/p/w500" 
-
-# ID Film Uji Coba (Contoh: Inception)
-TEST_MOVIE_ID = 27205
-
-# Menggunakan cache Streamlit agar permintaan API tidak diulang setiap kali widget diubah
-@st.cache_data(ttl=3600)
-def get_movie_details(movie_id):
-    """Mengambil detail film dari TMDb."""
-    # URL yang benar: /3/movie/{id}
-    url = f"{TMDB_API_BASE_URL}/movie/{movie_id}?api_key={TMDB_API_KEY}"
-    try:
-        response = requests.get(url)
-        response.raise_for_status() # Cek status HTTP
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Gagal mengambil detail film: {e}")
-        return {}
+API_URL = "https://api.themoviedb.org/3" 
+GAMBAR_PREFIX = "https://image.tmdb.org/t/p/w500" 
+GAMBAR_PREFIX_ACTOR = "https://image.tmdb.org/t/p/w200" # Lebih kecil untuk aktor
 
 @st.cache_data(ttl=3600)
-def get_movie_credits(movie_id):
-    """Mengambil daftar aktor (credits) dari TMDb."""
-    # URL yang benar: /3/movie/{id}/credits
-    url = f"{TMDB_API_BASE_URL}/movie/{movie_id}/credits?api_key={TMDB_API_KEY}"
+def ambil_data_dari_api(endpoint, params=None): 
+    """Fungsi umum untuk mengambil data dari TMDb dengan caching."""
+    url = f"{API_URL}/{endpoint}?api_key={TMDB_API_KEY}"
+    if params:
+        url += f"&{params}" 
+        
     try:
-        response = requests.get(url)
-        response.raise_for_status() # Cek status HTTP
-        return response.json()
+        respons = requests.get(url)
+        respons.raise_for_status() 
+        return respons.json()
     except requests.exceptions.RequestException as e:
-        st.error(f"Gagal mengambil data aktor: {e}")
-        return {}
+        st.error(f"Error saat mengambil data dari API: {e}")
+        return None
+
+def cari_film(query):
+    """Fungsi pencarian film (F4) Halaman 1."""
+    return ambil_data_dari_api("search/movie", params=f"query={query}") 
 
 
-# ----------------------------------------------------
-# TAMPILAN UTAMA STREAMLIT
-# ----------------------------------------------------
+# ==============================================================================
+# 2. INISIALISASI SESSION STATE (Disederhanakan)
+# ==============================================================================
 
-st.title("🎬 Movie & Actor Profile Explorer (MAP-X)")
-st.caption("Fokus Minggu 1: Menampilkan detail film statis dan daftar aktor.")
-st.markdown("---")
-
-# ----------------------------------------------------
-# F2: PENGAMBILAN DAN TAMPILAN DETAIL FILM
-# ----------------------------------------------------
-
-st.subheader(f"Detail Film Uji Coba (ID: {TEST_MOVIE_ID})")
-movie_data = get_movie_details(TEST_MOVIE_ID)
-
-if 'title' in movie_data:
-    st.header(movie_data['title'])
+if 'selected_movie_id' not in st.session_state:
+    st.session_state.selected_movie_id = None 
+if 'page' not in st.session_state:
+    st.session_state.page = 'search_page' # Halaman awal: Pencarian
     
-    col_img, col_info = st.columns([1, 2]) # Bagi layar untuk poster dan info
     
-    with col_img:
-        # Menampilkan Poster
-        if movie_data.get('poster_path'):
-            # PERBAIKAN: Gunakan IMAGE_PREFIX_URL untuk menampilkan gambar
-            poster_url = IMAGE_PREFIX_URL + movie_data['poster_path']
-            st.image(poster_url, width=250)
-        else:
-            st.write("Poster tidak tersedia.")
+# ==============================================================================
+# 3. FUNGSI HALAMAN (PAGE FUNCTIONS)
+# ==============================================================================
 
-    with col_info:
-        st.subheader("Sinopsis")
-        st.info(movie_data.get('overview', 'Sinopsis tidak tersedia.'))
+# --- FUNGSI actor_detail_page DIHAPUS ---
+
+def movie_detail_page():
+    """Menampilkan halaman detail film, dengan tampilan aktor statis."""
+    
+    movie_id = st.session_state.selected_movie_id
+    
+    # Ambil Data Film (F2) dan Kredit (F3)
+    data_film = ambil_data_dari_api(f"movie/{movie_id}")
+    data_kredit = ambil_data_dari_api(f"movie/{movie_id}/credits")
+
+    if data_film and 'title' in data_film:
+        st.title(data_film['title'])
         
-        # Penanganan data rilis yang mungkin kosong
-        release_date = movie_data.get('release_date', 'N/A')
-        release_year = release_date[:4] if release_date != 'N/A' and len(release_date) >= 4 else 'N/A'
-
-        st.write(f"**Tahun Rilis:** {release_year}")
-        st.write(f"**Rating:** {movie_data.get('vote_average', 0.0):.1f} / 10")
+        col_img, col_info = st.columns([1, 2])
         
-else:
-    # Error akan ditampilkan oleh fungsi get_movie_details jika gagal mengambil data
-    st.error("❌ Gagal memuat detail film. Pastikan API Key valid dan berfungsi.")
-
-
-st.markdown("---")
-
-# ----------------------------------------------------
-# F3: PENGAMBILAN DAN TAMPILAN DATA AKTOR PRIMER
-# ----------------------------------------------------
-
-st.subheader("👨‍🎤 Daftar Aktor Utama (Cast)")
-credits_data = get_movie_credits(TEST_MOVIE_ID)
-
-if credits_data and 'cast' in credits_data:
-    # Ambil 8 aktor utama saja
-    actors = credits_data['cast'][:8] 
-    actor_columns = st.columns(len(actors))
-
-    for i, actor in enumerate(actors):
-        with actor_columns[i]:
-            actor_id = actor['id']
-            
-            # Tampilkan Nama Aktor dan Karakter
-            st.markdown(f"**{actor['name']}**")
-            st.caption(f"Sebagai: {actor['character']}")
-            
-            # Tampilkan Foto Profil
-            if actor.get('profile_path'):
-                # PERBAIKAN: Gunakan IMAGE_PREFIX_URL untuk menampilkan foto
-                profile_url = IMAGE_PREFIX_URL + actor['profile_path']
-                st.image(profile_url, width=100)
+        with col_img:
+            # Tampilkan Poster
+            if data_film.get('poster_path'):
+                poster_url = GAMBAR_PREFIX + data_film['poster_path']
+                st.image(poster_url, width=250)
             else:
-                # Placeholder jika tidak ada foto
-                st.write("No Photo")
-            
-            # Catatan untuk Minggu 3: Link/ID sudah tersedia
-            # st.caption(f"ID Aktor: {actor_id}") 
-            
-else:
-    st.warning("Data aktor tidak ditemukan untuk film ini.")
+                st.image("https://via.placeholder.com/250x375.png?text=No+Poster", width=250)
 
-st.markdown("---")
-st.markdown("**Status:** Code siap dijalankan. Harap pastikan lingkungan virtual sudah aktif (`source .venv/bin/activate`) sebelum menjalankan `streamlit run app.py`.")
+        with col_info:
+            st.subheader("Sinopsis")
+            st.info(data_film.get('overview', 'Sinopsis tidak tersedia.'))
+            st.markdown(f"**Tahun Rilis:** {data_film.get('release_date', 'N/A')[:4]}")
+            st.markdown(f"**Rating:** {data_film.get('vote_average', 0.0):.1f} / 10")
+        
+        st.markdown("---")
+
+        # Logika Tampilan Aktor Statis
+        st.subheader("Para Aktor Utama (Maksimal 15) 🌟")
+
+        if data_kredit and 'cast' in data_kredit:
+            aktor_utama = data_kredit['cast'][:15] 
+            
+            if aktor_utama:
+                # Membuat kolom untuk tampilan horizontal
+                cols = st.columns(len(aktor_utama))
+                
+                for i, aktor in enumerate(aktor_utama):
+                    with cols[i]:
+                        
+                        # Menampilkan Foto Aktor
+                        if aktor.get('profile_path'):
+                            profile_url = GAMBAR_PREFIX_ACTOR + aktor['profile_path']
+                            st.image(profile_url, width=100)
+                        else:
+                            st.text(" [No Image] ")
+                        
+                        # Hanya menampilkan nama (tidak ada tombol)
+                        st.markdown(f"**{aktor['name']}**")
+
+                        st.caption(f"Sebagai: {aktor['character']}")
+        else:
+            st.warning("Data aktor tidak tersedia untuk film ini.")
+
+    if st.button("⬅️ Kembali ke Pencarian"):
+        st.session_state.page = 'search_page'
+        st.session_state.selected_movie_id = None
+        st.rerun()
+
+def search_page():
+    """Halaman Utama Pencarian (F4, F5, F6)"""
+    
+    st.title("🎬 Movie Profile Explorer (MAP-X)")
+    st.caption("Minggu 1 & 2: Pencarian Efisien")
+    
+    # F4: Input Nama Film
+    input_nama_film = st.text_input(
+        "Masukkan Judul Film untuk Mencari:",
+        placeholder="Contoh: Interstellar",
+        key='search_input' 
+    )
+
+    # ----------------------------------------------------
+    # F5 & F6: DROPDOWN HASIL PENCARIAN dan PEMILIHAN
+    # ----------------------------------------------------
+
+    movies = []
+    movie_id_map = {}
+
+    if input_nama_film and len(input_nama_film) >= 3:
+        hasil_pencarian = cari_film(input_nama_film) 
+        movies = hasil_pencarian.get('results', [])
+
+    if movies:
+        movie_options = []
+        
+        for movie in movies[:15]: 
+            title = movie['title']
+            year = movie.get('release_date', '')[:4]
+            option_label = f"{title} ({year})"
+            
+            movie_options.append(option_label)
+            movie_id_map[option_label] = movie['id']
+
+        movie_options.insert(0, '--- Pilih Film dari Hasil Pencarian ---')
+        
+        # F6: Tampilkan Selectbox
+        selected_option = st.selectbox(
+            "Hasil Ditemukan, Pilih Film:", 
+            movie_options,
+            index=0, 
+            key='movie_selector' 
+        )
+        
+        # F6: Logika Pemilihan ID
+        if selected_option != '--- Pilih Film dari Hasil Pencarian ---':
+            st.session_state.selected_movie_id = movie_id_map[selected_option]
+            st.session_state.page = 'movie_detail' # Langsung pindah ke halaman detail
+            st.rerun()
+        
+    elif input_nama_film and len(input_nama_film) >= 3:
+        st.warning(f"Film dengan judul '{input_nama_film}' tidak ditemukan.")
+
+
+# ==============================================================================
+# 4. FUNGSI UTAMA APLIKASI (Disederhanakan)
+# ==============================================================================
+
+def main():
+    """Fungsi utama untuk menjalankan aplikasi dan mengelola navigasi."""
+    st.set_page_config(layout="wide")
+    
+    # Logika Navigasi: Hanya dua halaman yang dikelola
+    if st.session_state.page == 'search_page':
+        search_page()
+    elif st.session_state.page == 'movie_detail':
+        movie_detail_page()
+
+if __name__ == "__main__":
+    main()
