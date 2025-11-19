@@ -1,13 +1,13 @@
 # Simpan file ini di folder 'pages/'
 import streamlit as st
-import sys
-import os
+import pandas as pd # Diperlukan untuk visualisasi F9
+import requests
+import altair as alt # Diperlukan untuk visualisasi F9
 
-# ----------------------------------------------------------------------
-# Impor fungsi dari file utama (app.py)
-# ----------------------------------------------------------------------
+# ==============================================================================
+# 1. Impor API dari app.py
+# ==============================================================================
 try:
-    # Mengimpor fungsi API dari file utama (app.py)
     from app import ambil_data_dari_api
 except ImportError:
     st.error("Error: Tidak dapat mengimpor fungsi 'ambil_data_dari_api' dari app.py.")
@@ -19,13 +19,60 @@ GAMBAR_PREFIX = "https://image.tmdb.org/t/p/w500"
 GAMBAR_PREFIX_ACTOR = "https://image.tmdb.org/t/p/w200"
 
 # ==============================================================================
-# FUNGSI TAMPILAN DETAIL FILM (F2, F3)
+# 2. CSS OVERRIDE (Person 2)
+# ==============================================================================
+
+st.markdown("""
+<style>
+/* Menghilangkan background image dari app.py dan menggantinya dengan warna putih */
+.stApp {
+    background-image: none;
+    background-color: white; 
+    color: black; 
+    padding-top: 20px;
+}
+/* Mengatur agar tombol kembali juga terlihat jelas */
+.stButton>button {
+    background-color: #C0392B; 
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# 3. FUNGSI VISUALISASI F9 (Person 3)
+# ==============================================================================
+
+def generate_actor_productivity_chart(credits_data):
+    """F9: Menghasilkan Grafik Produktivitas Aktor (Simulasi Data)."""
+    
+    st.subheader("📊 Visualisasi Data Proyek (F9: Produktivitas Aktor)")
+    
+    # *** KERANGKA KERJA F9 (Ganti dengan data yang diolah dari API NYATA) ***
+    data = pd.DataFrame({
+        'Tahun': [2018, 2019, 2020, 2021, 2022, 2023],
+        'Jumlah Film': [1, 3, 5, 2, 4, 1]
+    })
+    
+    chart = alt.Chart(data).mark_bar().encode(
+        x=alt.X('Tahun:O', title='Tahun Rilis'),
+        y=alt.Y('Jumlah Film:Q', title='Jumlah Produksi'),
+        tooltip=['Tahun', 'Jumlah Film']
+    ).properties(
+        title='Contoh: Produktivitas Produksi Film Aktor'
+    ).interactive()
+    
+    st.altair_chart(chart, use_container_width=True)
+    # -----------------------------------------------------------------------
+
+
+# ==============================================================================
+# 4. FUNGSI TAMPILAN DETAIL FILM & AKTOR
 # ==============================================================================
 
 def tampilkan_detail_film(movie_id):
     """Menampilkan detail film, dengan fokus Aktor di bagian atas."""
     
-    # Ambil Data
     data_film = ambil_data_dari_api(f"movie/{movie_id}")
     data_kredit = ambil_data_dari_api(f"movie/{movie_id}/credits")
 
@@ -36,7 +83,7 @@ def tampilkan_detail_film(movie_id):
     st.header(data_film['title'])
     
     # -----------------------------------------------
-    # 1. DAFTAR AKTOR (FOKUS UTAMA)
+    # A. DAFTAR AKTOR (Person 3)
     # -----------------------------------------------
     st.subheader("Para Aktor Utama (Top 20) 🌟")
 
@@ -61,7 +108,13 @@ def tampilkan_detail_film(movie_id):
     st.markdown("---")
     
     # -----------------------------------------------
-    # 2. POSTER & SINOPSIS (DETAIL FILM)
+    # B. AREA VISUALISASI (Person 3)
+    # -----------------------------------------------
+    generate_actor_productivity_chart(data_kredit)
+    st.markdown("---")
+    
+    # -----------------------------------------------
+    # C. POSTER & SINOPSIS (Person 2)
     # -----------------------------------------------
     st.subheader("Detail Film & Sinopsis")
 
@@ -75,19 +128,17 @@ def tampilkan_detail_film(movie_id):
         st.markdown(f"**Rating:** {data_film.get('vote_average', 0.0):.1f} / 10")
     
     if st.button("⬅️ Kembali ke Pencarian", key='back_btn'):
-        # Tombol kembali yang akan mengarahkan ke file app.py
         st.session_state.selected_movie_id = None
         st.switch_page("app.py")
 
 
 # ==============================================================================
-# LOGIKA EKSEKUSI HALAMAN (Memastikan TIDAK ADA Inputan Baru)
+# LOGIKA EKSEKUSI HALAMAN 
 # ==============================================================================
 
 if __name__ == "__main__":
     
     if 'selected_movie_id' not in st.session_state or st.session_state.selected_movie_id is None:
-        # Jika halaman ini diakses tanpa ID film (seharusnya tidak terjadi), kembalikan
         st.warning("Silakan pilih film terlebih dahulu di halaman utama.")
         st.switch_page("app.py")
     else:
